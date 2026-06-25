@@ -1,0 +1,6 @@
+{
+  "name": "দৈনিক বিক্রির খাতা",
+  "description": "দৈনিক বিক্রির হিসাব এবং নগদ ও বাকির খাতা রাখার আধুনিক অ্যান্ড্রয়েড অ্যাপ।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
