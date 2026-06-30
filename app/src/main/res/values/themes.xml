@@ -2,4 +2,13 @@
 <resources>
 
     <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar" />
+
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <!-- Modern clean background color matching Clean Minimalism -->
+        <item name="windowSplashScreenBackground">#F7F9FC</item>
+        <!-- The app's icon as the splash image -->
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <!-- Redirects to main theme after the splash transitions -->
+        <item name="postSplashScreenTheme">@style/Theme.MyApplication</item>
+    </style>
 </resources>

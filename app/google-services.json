@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "183030134662",
+    "project_id": "daily-sale-count",
+    "storage_bucket": "daily-sale-count.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:183030134662:android:03b54e0e926aec3d0f9e07",
+        "android_client_info": {
+          "package_name": "com.aistudio.dailysalesbook.fzkxws"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBXS_wNtQND8I55wf2iNOez1mGSnFpPGmc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
