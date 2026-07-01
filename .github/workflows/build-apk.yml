@@ -30,23 +30,70 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Generate clean and valid Gradle Wrapper
+        run: |
+          echo "=== Creating a temporary directory with blank settings.gradle ==="
+          mkdir -p /tmp/gradle-wrapper-temp
+          cd /tmp/gradle-wrapper-temp
+          touch settings.gradle
+          
+          echo "=== Generating clean Gradle Wrapper ==="
+          gradle wrapper --gradle-version 8.9 --distribution-type all
+          
+          echo "=== Copying clean wrapper files to project ==="
+          cd $GITHUB_WORKSPACE
+          if [ -d "android" ]; then
+            echo "Detected Capacitor or nested Android folder 'android'."
+            TARGET_DIR="android"
+          else
+            echo "Detected native Android root folder."
+            TARGET_DIR="."
+          fi
+          
+          mkdir -p $TARGET_DIR/gradle/wrapper
+          cp /tmp/gradle-wrapper-temp/gradlew $TARGET_DIR/gradlew
+          cp /tmp/gradle-wrapper-temp/gradle/wrapper/gradle-wrapper.jar $TARGET_DIR/gradle/wrapper/gradle-wrapper.jar
+          cp /tmp/gradle-wrapper-temp/gradle/wrapper/gradle-wrapper.properties $TARGET_DIR/gradle/wrapper/gradle-wrapper.properties
+          
+          echo "=== Verifying the generated files ==="
+          ls -la $TARGET_DIR/gradlew
+          ls -la $TARGET_DIR/gradle/wrapper/
+
       - name: Make Gradle Wrapper Executable
-        run: chmod +x gradlew
+        run: |
+          if [ -d "android" ]; then
+            chmod +x android/gradlew
+          else
+            chmod +x gradlew
+          fi
 
       - name: Generate Debug Keystore
         run: |
-          if [ ! -f "debug.keystore" ]; then
-            echo "Generating new debug keystore..."
-            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          if [ -d "android" ]; then
+            TARGET_DIR="android"
           else
-            echo "debug.keystore already exists."
+            TARGET_DIR="."
+          fi
+          if [ ! -f "$TARGET_DIR/debug.keystore" ]; then
+            echo "Generating new debug keystore inside $TARGET_DIR..."
+            keytool -genkey -v -keystore $TARGET_DIR/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          else
+            echo "debug.keystore already exists in $TARGET_DIR."
           fi
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: |
+          if [ -d "android" ]; then
+            cd android
+            ./gradlew assembleDebug
+          else
+            ./gradlew assembleDebug
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            **/build/outputs/apk/debug/*-debug.apk
+            **/build/outputs/apk/debug/*.apk
