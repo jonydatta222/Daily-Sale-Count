@@ -11,7 +11,7 @@ Android build-এ `com.android.internal.application` প্লাগইন evalu
 
 - সরাসরি `./android` ডিরেক্টরিতে `gradle wrapper` কমান্ড চালানো যাবে না।
 - একটি সম্পূর্ণ আলাদা টেম্পোরারি ডিরেক্টরি তৈরি করে সেখানে একটি খালি `settings.gradle` ফাইল তৈরি করতে হবে, যাতে গ্র্যাডল হোস্ট মেশিনের Daemon দিয়ে মূল প্রজেক্টকে evaluated করার চেষ্টা না করে।
-- সেই টেম্পোরারি ফোল্ডারে ক্লিন উপায়ে `gradle wrapper --gradle-version 8.14.3 --distribution-type all` রান করতে হবে।
+- সেই টেম্পোরারি ফোল্ডারে ক্লিন উপায়ে `gradle wrapper --gradle-version 9.3.1 --distribution-type all` রান করতে হবে।
 - জেনারেট হওয়া ফাইলগুলো (`gradlew`, `gradle-wrapper.jar`, `gradle-wrapper.properties`) প্রজেক্টের `android/` বা রুট ডিরেক্টরিতে (প্রজেক্ট স্ট্রাকচার অনুযায়ী) কপি করতে হবে।
 
 ### 2. GitHub Actions Workflow Configuration
@@ -26,7 +26,7 @@ Android build-এ `com.android.internal.application` প্লাগইন evalu
           touch settings.gradle
           
           echo "=== Generating clean Gradle Wrapper ==="
-          gradle wrapper --gradle-version 8.14.3 --distribution-type all
+          gradle wrapper --gradle-version 9.3.1 --distribution-type all
           
           echo "=== Copying clean wrapper files to project ==="
           cd $GITHUB_WORKSPACE
