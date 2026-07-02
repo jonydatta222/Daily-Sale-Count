@@ -45,6 +45,16 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
     private val _lastSyncedTime = MutableStateFlow(prefs.getString("last_synced_time", null))
     val lastSyncedTime: StateFlow<String?> = _lastSyncedTime.asStateFlow()
 
+    // Language configuration (default is Bangla = true)
+    private val _isBangla = MutableStateFlow(prefs.getBoolean("is_bangla", true))
+    val isBangla: StateFlow<Boolean> = _isBangla.asStateFlow()
+
+    fun toggleLanguage() {
+        val newVal = !_isBangla.value
+        _isBangla.value = newVal
+        prefs.edit().putBoolean("is_bangla", newVal).apply()
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val salesForSelectedDate: StateFlow<List<SaleItem>> = _selectedDate
         .flatMapLatest { date ->
@@ -69,6 +79,14 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = 0.0
+        )
+
+    // Flow of all sales for the "Old Ledger" feature
+    val allSalesList: StateFlow<List<SaleItem>> = repository.getAllSalesFlow()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
         )
 
     // Form inputs
@@ -111,18 +129,18 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
         val type = _saleType.value
 
         if (type == "due" && customer.isEmpty()) {
-            onError("দয়া করে গ্রাহকের নাম লিখুন।")
+            onError(if (_isBangla.value) "দয়া করে গ্রাহকের নাম লিখুন।" else "Please enter customer name.")
             return
         }
 
         if (type != "due" && name.isEmpty()) {
-            onError("দয়া করে সঠিক বিবরণ লিখুন।")
+            onError(if (_isBangla.value) "দয়া করে সঠিক বিবরণ লিখুন।" else "Please enter correct description.")
             return
         }
 
         val price = priceStr.toDoubleOrNull()
         if (price == null || price <= 0) {
-            onError("দয়া করে সঠিক দাম লিখুন।")
+            onError(if (_isBangla.value) "দয়া করে সঠিক দাম লিখুন।" else "Please enter correct price.")
             return
         }
 
@@ -132,7 +150,7 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
             val timeString = SimpleDateFormat("hh:mm a", Locale.US).format(now)
 
             val saleItem = SaleItem(
-                name = if (type == "due" && name.isEmpty()) "বাকি বিক্রি" else name,
+                name = if (type == "due" && name.isEmpty()) (if (_isBangla.value) "বাকি বিক্রি" else "Due Sale") else name,
                 customerName = if (type == "due") customer else "",
                 price = price,
                 type = type,
@@ -142,7 +160,7 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
 
             repository.insert(saleItem)
             
-            // Set view date back to today (as in HTML logic)
+            // Set view date back to today
             _selectedDate.value = autoDate
 
             // Clear form inputs
@@ -156,6 +174,93 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun editSale(id: Long, name: String, customerName: String, price: Double, type: String, date: String, time: String) {
+        viewModelScope.launch {
+            val existing = repository.getAllSales().find { it.id == id } ?: return@launch
+            val updated = existing.copy(
+                name = name,
+                customerName = if (type == "due") customerName else "",
+                price = price,
+                type = type,
+                date = date,
+                time = time
+            )
+            repository.insert(updated)
+            uploadToFirebase()
+        }
+    }
+
+    fun addExpense(description: String, amount: Double, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        if (description.trim().isEmpty()) {
+            onError(if (_isBangla.value) "দয়া করে খরচের বিবরণ লিখুন।" else "Please enter expense description.")
+            return
+        }
+        if (amount <= 0) {
+            onError(if (_isBangla.value) "দয়া করে সঠিক পরিমাণ লিখুন।" else "Please enter correct amount.")
+            return
+        }
+        viewModelScope.launch {
+            val now = Date()
+            val autoDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(now)
+            val timeString = SimpleDateFormat("hh:mm a", Locale.US).format(now)
+
+            val expenseItem = SaleItem(
+                name = description.trim(),
+                customerName = "",
+                price = amount,
+                type = "expense",
+                date = autoDate,
+                time = timeString
+            )
+            repository.insert(expenseItem)
+            _selectedDate.value = autoDate
+            onSuccess()
+            uploadToFirebase()
+        }
+    }
+
+    fun depositDue(dueItem: SaleItem, depositAmount: Double, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            if (depositAmount <= 0) return@launch
+
+            val remaining = dueItem.price - depositAmount
+            if (remaining <= 0) {
+                // Fully paid
+                repository.delete(dueItem.id)
+            } else {
+                // Partially paid
+                val updatedDue = dueItem.copy(price = remaining)
+                repository.insert(updatedDue)
+            }
+
+            // Insert cash deposit item for today
+            val now = Date()
+            val autoDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(now)
+            val timeString = SimpleDateFormat("hh:mm a", Locale.US).format(now)
+
+            val bakiName = dueItem.customerName.ifEmpty { dueItem.name }
+            val depositTitle = if (_isBangla.value) {
+                "বাকির টাকা জমা (গ্রাহক: $bakiName)"
+            } else {
+                "Due Payment Received (Customer: $bakiName)"
+            }
+
+            val depositItem = SaleItem(
+                name = depositTitle,
+                customerName = "",
+                price = depositAmount,
+                type = "cash",
+                date = autoDate,
+                time = timeString
+            )
+            repository.insert(depositItem)
+
+            _selectedDate.value = autoDate
+            onSuccess()
+            uploadToFirebase()
+        }
+    }
+
     fun deleteSale(id: Long) {
         viewModelScope.launch {
             repository.delete(id)
@@ -164,27 +269,8 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun collectDueSale(dueItem: SaleItem) {
-        viewModelScope.launch {
-            repository.delete(dueItem.id)
-            
-            val now = Date()
-            val autoDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(now)
-            val timeString = SimpleDateFormat("hh:mm a", Locale.US).format(now)
-            
-            val bakiName = dueItem.customerName.ifEmpty { dueItem.name }
-            val collectionItem = SaleItem(
-                name = "বাকির টাকা জমা (গ্রাহক: $bakiName)",
-                customerName = "",
-                price = dueItem.price,
-                type = "cash",
-                date = autoDate,
-                time = timeString
-            )
-            repository.insert(collectionItem)
-            
-            _selectedDate.value = autoDate
-            uploadToFirebase()
-        }
+        // Fallback or full collection
+        depositDue(dueItem, dueItem.price) {}
     }
 
     fun clearSalesForSelectedDate() {
@@ -245,7 +331,7 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
             _isSyncing.value = false
             android.widget.Toast.makeText(
                 getApplication(),
-                "ফায়ারবেস ডাটাবেজ সংযোগ ব্যর্থ: $lastErrorMsg",
+                if (_isBangla.value) "ফায়ারবেস ডাটাবেজ সংযোগ ব্যর্থ: $lastErrorMsg" else "Firebase connection failed: $lastErrorMsg",
                 android.widget.Toast.LENGTH_LONG
             ).show()
             return
@@ -278,14 +364,14 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
                                     prefs.edit().putString("last_synced_time", nowStr).apply()
                                     android.widget.Toast.makeText(
                                         getApplication(),
-                                        "ক্লাউড ব্যাকআপ সফল হয়েছে!",
+                                        if (_isBangla.value) "ক্লাউড ব্যাকআপ সফল হয়েছে!" else "Cloud backup successful!",
                                         android.widget.Toast.LENGTH_SHORT
                                     ).show()
                                 } else {
                                     val err = task.exception?.localizedMessage ?: "অনুমতি অস্বীকৃত (Rules check)"
                                     android.widget.Toast.makeText(
                                         getApplication(),
-                                        "সিঙ্ক ব্যর্থ: $err",
+                                        if (_isBangla.value) "সিঙ্ক ব্যর্থ: $err" else "Sync failed: $err",
                                         android.widget.Toast.LENGTH_LONG
                                     ).show()
                                 }
@@ -297,7 +383,7 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
                         _isSyncing.value = false
                         android.widget.Toast.makeText(
                             getApplication(),
-                            "অনুমতি নেই বা সংযোগ ত্রুটি: ${error.message}",
+                            if (_isBangla.value) "অনুমতি নেই বা সংযোগ ত্রুটি: ${error.message}" else "Permission denied or connection error: ${error.message}",
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                     }
@@ -306,7 +392,7 @@ class SaleViewModel(application: Application) : AndroidViewModel(application) {
                 _isSyncing.value = false
                 android.widget.Toast.makeText(
                     getApplication(),
-                    "ত্রুটি: ${e.localizedMessage}",
+                    "Error: ${e.localizedMessage}",
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }

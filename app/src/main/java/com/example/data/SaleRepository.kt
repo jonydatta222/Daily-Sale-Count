@@ -7,6 +7,8 @@ class SaleRepository(private val saleDao: SaleDao) {
     
     fun getAllDueSales(): Flow<List<SaleItem>> = saleDao.getAllDueSalesFlow()
     
+    fun getAllSalesFlow(): Flow<List<SaleItem>> = saleDao.getAllSalesFlow()
+    
     suspend fun getAllSales(): List<SaleItem> = saleDao.getAllSales()
     
     suspend fun insert(sale: SaleItem) = saleDao.insertSale(sale)
