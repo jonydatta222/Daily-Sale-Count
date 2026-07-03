@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.MenuBook
@@ -206,6 +207,7 @@ fun DailySalesScreen(
     
     // Active Tab: 0 -> Today's entries, 1 -> Due List, 2 -> Old Ledger
     var activeTab by remember { mutableStateOf(0) }
+    var bottomTab by remember { mutableStateOf(0) }
     
     // Interactive Dialog States
     var showCalculator by remember { mutableStateOf(false) }
@@ -245,13 +247,17 @@ fun DailySalesScreen(
     val onDeleteItem = remember { { item: SaleItem -> itemToDelete = item } }
     val onEditItem = remember { { item: SaleItem -> itemToEdit = item } }
 
-    // Live Ticking Clock state (adapts automatically to locale changes)
+    // Live Ticking Clock state (adapts automatically to locale changes with 12-hour AM/PM guarantee)
     var currentTimeString by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
         while (true) {
-            val now = Date()
-            val formatted = SimpleDateFormat("hh:mm:ss a", Locale.US).format(now)
-            currentTimeString = formatted
+            val cal = Calendar.getInstance()
+            val hour = cal.get(Calendar.HOUR)
+            val displayHour = if (hour == 0) 12 else hour
+            val minute = cal.get(Calendar.MINUTE)
+            val second = cal.get(Calendar.SECOND)
+            val amPm = if (cal.get(Calendar.AM_PM) == Calendar.AM) "AM" else "PM"
+            currentTimeString = String.format(Locale.US, "%02d:%02d:%02d %s", displayHour, minute, second, amPm)
             kotlinx.coroutines.delay(1000)
         }
     }
@@ -296,19 +302,308 @@ fun DailySalesScreen(
     }
 
     Scaffold(
-        modifier = modifier.background(Color(0xFFF8FAFC))
+        modifier = modifier.background(Color(0xFFF8FAFC)),
+        bottomBar = {
+            DailySalesBottomNavigation(
+                selectedTab = bottomTab,
+                onTabSelected = { tab ->
+                    bottomTab = tab
+                    if (tab == 0) {
+                        if (activeTab == 2) {
+                            activeTab = 0
+                        }
+                    } else if (tab == 2) {
+                        activeTab = 2
+                    }
+                },
+                isBangla = isBangla
+            )
+        }
     ) { scaffoldPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFFF8FAFC))
-                .padding(scaffoldPadding)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        if (bottomTab == 1) {
+            MonthlyReportScreen(
+                allSalesList = allSalesList,
+                isBangla = isBangla,
+                onNavigateToDate = { date ->
+                    viewModel.onDateSelected(date)
+                    bottomTab = 0
+                    activeTab = 0
+                },
+                modifier = Modifier.padding(scaffoldPadding)
+            )
+        } else if (bottomTab == 3) {
+            val googleEmail by viewModel.googleAccountEmail.collectAsState()
+            val isSyncing by viewModel.isSyncing.collectAsState()
+            val lastSyncedTime by viewModel.lastSyncedTime.collectAsState()
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFFF8FAFC))
+                    .padding(scaffoldPadding)
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Text(
+                        text = if (isBangla) "সেটিংস ও ব্যাকআপ খতিয়ান" else "Settings & Backup",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Translate,
+                                    contentDescription = null,
+                                    tint = Color(0xFF005FB0),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (isBangla) "ভাষা পরিবর্তন করুন" else "Change Language",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color(0xFF1E293B)
+                                    )
+                                    Text(
+                                        text = if (isBangla) "বর্তমানে বাংলা ভাষা নির্বাচন করা আছে" else "Currently English language is selected",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF64748B)
+                                    )
+                                }
+                                Button(
+                                    onClick = { viewModel.toggleLanguage() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF005FB0)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = if (isBangla) "English" else "বাংলা",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                text = if (isBangla) "গুগল ক্লাউড ব্যাকআপ" else "Google Cloud Backup",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFF0F172A)
+                            )
+
+                            Text(
+                                text = if (isBangla) {
+                                    "আপনার হিসাব খাতার সমস্ত ডাটা অনলাইনে সুরক্ষিত রাখতে গুগল ড্রাইভ বা ফায়ারবেস রিয়েল-টাইম ডাটাবেস ব্যাকআপ ব্যবহার করুন।"
+                                } else {
+                                    "Securely save and sync all your sales and ledger data online using Google/Firebase Realtime Database."
+                                },
+                                fontSize = 12.sp,
+                                color = Color(0xFF64748B)
+                            )
+
+                            if (googleEmail != null) {
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .background(Color(0xFF3B82F6), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            val letter = googleEmail?.take(1)?.uppercase(Locale.US) ?: "U"
+                                            Text(letter, color = Color.White, fontWeight = FontWeight.Bold)
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Jony Datta", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
+                                            Text(googleEmail ?: "", fontSize = 11.sp, color = Color(0xFF3B82F6))
+                                        }
+                                        Surface(
+                                            color = Color(0xFFD1FAE5),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = if (isBangla) "সক্রিয়" else "Active",
+                                                color = Color(0xFF065F46),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(if (isBangla) "ব্যাকআপ অবস্থা:" else "Backup Status:", fontSize = 12.sp, color = Color(0xFF64748B))
+                                        Text(if (isBangla) "১০০% নিরাপদ ও সিঙ্কড" else "100% Secured & Synced", fontSize = 12.sp, color = Color(0xFF059669), fontWeight = FontWeight.Bold)
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(if (isBangla) "শেষ সিঙ্ক সময়:" else "Last Synced:", fontSize = 12.sp, color = Color(0xFF64748B))
+                                        Text(
+                                            text = if (lastSyncedTime != null) convertDigits(lastSyncedTime!!, isBangla) else (if (isBangla) "সিঙ্ক করা হয়নি" else "Not synced yet"),
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF1E293B),
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = { viewModel.syncNow() },
+                                        enabled = !isSyncing,
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF005FB0)),
+                                        modifier = Modifier.weight(1.3f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                            Text(
+                                                text = if (isSyncing) (if (isBangla) "সিঙ্ক হচ্ছে..." else "Syncing...") else (if (isBangla) "এখনই সিঙ্ক করুন" else "Sync Now"),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+                                    Button(
+                                        onClick = { viewModel.signOutGoogle() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFEE2E2)),
+                                        modifier = Modifier.weight(0.9f),
+                                        border = BorderStroke(1.dp, Color(0xFFFCA5A5)),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isBangla) "সাইন-আউট" else "Sign Out",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFDC2626)
+                                        )
+                                    }
+                                }
+                            } else {
+                                Button(
+                                    onClick = { showGoogleChooser = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = if (isBangla) "গুগল অ্যাকাউন্ট দিয়ে ব্যাকআপ চালু করুন" else "Enable Backup with Google Account",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = if (isBangla) "💡 গুরুত্বপূর্ণ তথ্য" else "💡 Important Information",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF92400E)
+                            )
+                            Text(
+                                text = if (isBangla) {
+                                    "অ্যাপ্লিকেশনটির ইন্টারনেট পারমিশন সক্রিয় করা হয়েছে। এখন আপনার তৈরি করা APK ফাইল থেকেও গুগল ব্যাকআপ ও ক্লাউড সিঙ্ক ১০০% কাজ করবে কোনো বাধা ছাড়াই।"
+                                } else {
+                                    "The application's internet permission has been fully activated. Now Google Backup and cloud sync will work 100% flawlessly even from compiled APKs."
+                                },
+                                fontSize = 11.sp,
+                                color = Color(0xFFB45309),
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFFF8FAFC))
+                    .padding(scaffoldPadding)
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             // Elegant bilingual header section
-            item {
+            if (bottomTab == 0) {
+                item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -368,22 +663,6 @@ fun DailySalesScreen(
                                 Icon(
                                     imageVector = Icons.Default.Calculate,
                                     contentDescription = "Calculator",
-                                    tint = Color(0xFF0F172A),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            // Settings Button
-                            IconButton(
-                                onClick = { showSettingsDialog = true },
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .background(Color(0xFFF1F5F9), CircleShape)
-                                    .border(1.dp, Color(0xFFE2E8F0), CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = "Settings",
                                     tint = Color(0xFF0F172A),
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -480,7 +759,8 @@ fun DailySalesScreen(
             }
 
             // Nicely margined 4 smaller boxes display
-            item {
+            if (bottomTab == 0) {
+                item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -530,9 +810,11 @@ fun DailySalesScreen(
                     )
                 }
             }
+            }
 
             // Sold item inputs Form & "Add Expense" Option Button below boxes
-            item {
+            if (bottomTab == 0) {
+                item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -573,75 +855,58 @@ fun DailySalesScreen(
                     }
                 }
             }
+            }
 
-            // Beautiful tabbed row navigation (Today's Entries, All Due List, Old Ledger)
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                        .background(Color(0xFFF1F5F9), RoundedCornerShape(14.dp))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // Today's Entries Tab
-                    Box(
+            // Beautiful tabbed row navigation (Today's Entries, All Due List)
+            if (bottomTab == 0) {
+                item {
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .background(
-                                if (activeTab == 0) Color.White else Color.Transparent,
-                                RoundedCornerShape(10.dp)
-                            )
-                            .clickable { activeTab = 0 }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .background(Color(0xFFF1F5F9), RoundedCornerShape(14.dp))
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(
-                            text = if (isBangla) "আজকের খতিয়ান" else "Today's Entries",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = if (activeTab == 0) Color(0xFF0F172A) else Color(0xFF64748B)
-                        )
-                    }
-                    
-                    // All Due Tab
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .background(
-                                if (activeTab == 1) Color.White else Color.Transparent,
-                                RoundedCornerShape(10.dp)
+                        // Today's Entries Tab
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (activeTab == 0) Color.White else Color.Transparent,
+                                    RoundedCornerShape(10.dp)
+                                )
+                                .clickable { activeTab = 0 }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (isBangla) "আজকের খতিয়ান" else "Today's Entries",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = if (activeTab == 0) Color(0xFF0F172A) else Color(0xFF64748B)
                             )
-                            .clickable { activeTab = 1 }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (isBangla) "বাকির লিস্ট" else "Due List",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = if (activeTab == 1) Color(0xFFB91C1C) else Color(0xFF64748B)
-                        )
-                    }
-                    
-                    // Old Ledger Tab
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .background(
-                                if (activeTab == 2) Color.White else Color.Transparent,
-                                RoundedCornerShape(10.dp)
+                        }
+                        
+                        // All Due Tab
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (activeTab == 1) Color.White else Color.Transparent,
+                                    RoundedCornerShape(10.dp)
+                                )
+                                .clickable { activeTab = 1 }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (isBangla) "বাকির লিস্ট" else "Due List",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = if (activeTab == 1) Color(0xFFB91C1C) else Color(0xFF64748B)
                             )
-                            .clickable { activeTab = 2 }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (isBangla) "পুরোনো হিসাব" else "Old Ledger",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = if (activeTab == 2) Color(0xFF005FB0) else Color(0xFF64748B)
-                        )
+                        }
                     }
                 }
             }
@@ -1219,6 +1484,7 @@ fun DailySalesScreen(
                 }
             }
         }
+    }
     }
 
     // ----------------------------------------------------
@@ -2156,6 +2422,7 @@ fun DailySalesScreen(
         )
     }
 }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2706,4 +2973,393 @@ fun evaluateExpression(str: String): Double {
             return x
         }
     }.parse()
+}
+
+@Composable
+fun DailySalesBottomNavigation(
+    selectedTab: Int,
+    onTabSelected: (Int) -> Unit,
+    isBangla: Boolean
+) {
+    Surface(
+        color = Color.White,
+        tonalElevation = 8.dp,
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp, horizontal = 12.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val items = listOf(
+                Triple(0, if (isBangla) "হোম" else "Home", Icons.Default.Home),
+                Triple(1, if (isBangla) "মাসিক রিপোর্ট" else "Monthly", Icons.Default.DateRange),
+                Triple(2, if (isBangla) "পুরোনো হিসাব" else "Ledger", Icons.Default.MenuBook),
+                Triple(3, if (isBangla) "সেটিংস" else "Settings", Icons.Default.Settings)
+            )
+
+            items.forEach { (index, label, icon) ->
+                val isSelected = selectedTab == index
+                val tintColor = if (isSelected) Color(0xFF005FB0) else Color(0xFF64748B)
+                val bgSelected = if (isSelected) Color(0xFFEFF6FF) else Color.Transparent
+
+                Column(
+                    modifier = Modifier
+                        .background(bgSelected, RoundedCornerShape(12.dp))
+                        .clickable { onTabSelected(index) }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                        .testTag("bottom_nav_item_$index"),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = tintColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = label,
+                        fontSize = 11.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = tintColor
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MonthlyReportScreen(
+    allSalesList: List<SaleItem>,
+    isBangla: Boolean,
+    onNavigateToDate: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var selectedMonthCalendar by remember { mutableStateOf(Calendar.getInstance()) }
+    
+    val sdfYm = SimpleDateFormat("yyyy-MM", Locale.US)
+    val targetYm = sdfYm.format(selectedMonthCalendar.time)
+    
+    val monthlySales = remember(allSalesList, targetYm) {
+        allSalesList.filter { it.date.startsWith(targetYm) }
+    }
+    
+    val totalSales = remember(monthlySales) {
+        monthlySales.filter { it.type != "expense" }.sumOf { it.price }
+    }
+    val cashSales = remember(monthlySales) {
+        monthlySales.filter { it.type == "cash" }.sumOf { it.price }
+    }
+    val totalDue = remember(monthlySales) {
+        monthlySales.filter { it.type == "due" }.sumOf { it.price }
+    }
+    val totalExpense = remember(monthlySales) {
+        monthlySales.filter { it.type == "expense" }.sumOf { it.price }
+    }
+    
+    val salesByDate = remember(monthlySales) {
+        monthlySales.groupBy { it.date }
+            .mapValues { (dateStr, items) ->
+                val cashVal = items.filter { it.type == "cash" }.sumOf { it.price }
+                val dueVal = items.filter { it.type == "due" }.sumOf { it.price }
+                val expVal = items.filter { it.type == "expense" }.sumOf { it.price }
+                val totVal = cashVal + dueVal
+                DateSummary(
+                    date = dateStr,
+                    totalSales = totVal,
+                    cashReceived = cashVal,
+                    due = dueVal,
+                    expense = expVal
+                )
+            }
+            .values
+            .sortedByDescending { it.date }
+    }
+    
+    val monthNameBn = listOf("জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর")
+    val monthNameEn = listOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+    
+    val monthIndex = selectedMonthCalendar.get(Calendar.MONTH)
+    val yearStr = selectedMonthCalendar.get(Calendar.YEAR).toString()
+    
+    val monthLabel = if (isBangla) monthNameBn[monthIndex] else monthNameEn[monthIndex]
+    val displayMonthText = if (isBangla) "$monthLabel, ${convertDigits(yearStr, true)}" else "$monthLabel $yearStr"
+    
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8FAFC))
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Month Selector Bar
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            val newCal = Calendar.getInstance().apply {
+                                time = selectedMonthCalendar.time
+                                add(Calendar.MONTH, -1)
+                            }
+                            selectedMonthCalendar = newCal
+                        }
+                    ) {
+                        Text("◀", fontSize = 16.sp, color = Color(0xFF005FB0), fontWeight = FontWeight.Bold)
+                    }
+                    
+                    Text(
+                        text = displayMonthText,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF0F172A)
+                    )
+                    
+                    IconButton(
+                        onClick = {
+                            val newCal = Calendar.getInstance().apply {
+                                time = selectedMonthCalendar.time
+                                add(Calendar.MONTH, 1)
+                            }
+                            selectedMonthCalendar = newCal
+                        }
+                    ) {
+                        Text("▶", fontSize = 16.sp, color = Color(0xFF005FB0), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+        
+        // Monthly Metrics Cards Grid
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MinimalSummaryCard2(
+                        title = if (isBangla) "মোট বিক্রি" else "Total Sales",
+                        amount = totalSales,
+                        containerColor = Color(0xFFEFF6FF),
+                        textColor = Color(0xFF1E40AF),
+                        icon = Icons.Default.ShoppingCart,
+                        isBangla = isBangla,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MinimalSummaryCard2(
+                        title = if (isBangla) "নগদ জমা" else "Cash Recd",
+                        amount = cashSales,
+                        containerColor = Color(0xFFECFDF5),
+                        textColor = Color(0xFF065F46),
+                        icon = Icons.Default.AttachMoney,
+                        isBangla = isBangla,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MinimalSummaryCard2(
+                        title = if (isBangla) "মোট বাকি" else "Total Due",
+                        amount = totalDue,
+                        containerColor = Color(0xFFFEF2F2),
+                        textColor = Color(0xFF991B1B),
+                        icon = Icons.Default.Warning,
+                        isBangla = isBangla,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MinimalSummaryCard2(
+                        title = if (isBangla) "মোট খরচ" else "Total Exp",
+                        amount = totalExpense,
+                        containerColor = Color(0xFFFFFBEB),
+                        textColor = Color(0xFF92400E),
+                        icon = Icons.Default.RemoveCircleOutline,
+                        isBangla = isBangla,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+        
+        // Beautiful chart / progress bars representing proportions
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = if (isBangla) "মাসিক খতিয়ান চিত্র" else "Monthly Overview Chart",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF475569)
+                    )
+                    
+                    val totalAmt = totalSales + totalExpense
+                    val salesPercent = if (totalAmt > 0) (totalSales / totalAmt).toFloat() else 0f
+                    val expensePercent = if (totalAmt > 0) (totalExpense / totalAmt).toFloat() else 0f
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(if (isBangla) "বিক্রি অনুপাত" else "Sales Proportion", fontSize = 11.sp, color = Color(0xFF64748B))
+                            Text(convertDigits(String.format(Locale.US, "%.0f%%", salesPercent * 100), isBangla), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF005FB0))
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .background(Color(0xFFF1F5F9), RoundedCornerShape(4.dp))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(fraction = if (salesPercent > 0) salesPercent else 0.01f)
+                                    .height(8.dp)
+                                    .background(Color(0xFF005FB0), RoundedCornerShape(4.dp))
+                            )
+                        }
+                    }
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(if (isBangla) "খরচ অনুপাত" else "Expense Proportion", fontSize = 11.sp, color = Color(0xFF64748B))
+                            Text(convertDigits(String.format(Locale.US, "%.0f%%", expensePercent * 100), isBangla), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .background(Color(0xFFF1F5F9), RoundedCornerShape(4.dp))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(fraction = if (expensePercent > 0) expensePercent else 0.01f)
+                                    .height(8.dp)
+                                    .background(Color(0xFF92400E), RoundedCornerShape(4.dp))
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Month days list
+        item {
+            Text(
+                text = if (isBangla) "দিনের খতিয়ান তালিকা" else "Daily Ledger Entries",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1E293B)
+            )
+        }
+        
+        if (salesByDate.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 30.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isBangla) "এই মাসে কোনো এন্ট্রি নেই।" else "No entries in this month.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF94A3B8),
+                        fontStyle = FontStyle.Italic
+                    )
+                }
+            }
+        } else {
+            items(salesByDate) { daySum ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToDate(daySum.date) },
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = formatDisplayDateLocalized(daySum.date, isBangla),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF0F172A)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isBangla) "ট্যাপ করে বিস্তারিত দেখুন" else "Tap to view details",
+                                fontSize = 10.sp,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                        
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = (if (isBangla) "বিক্রি: ৳" else "Sales: ৳") + convertDigits(String.format(Locale.US, "%.0f", daySum.totalSales), isBangla),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF005FB0)
+                                )
+                                Text(
+                                    text = (if (isBangla) "নগদ: ৳" else "Cash: ৳") + convertDigits(String.format(Locale.US, "%.0f", daySum.cashReceived), isBangla),
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF059669)
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = (if (isBangla) "বাকি: ৳" else "Due: ৳") + convertDigits(String.format(Locale.US, "%.0f", daySum.due), isBangla),
+                                    fontSize = 10.sp,
+                                    color = Color(0xFFDC2626)
+                                )
+                                Text(
+                                    text = (if (isBangla) "খরচ: ৳" else "Exp: ৳") + convertDigits(String.format(Locale.US, "%.0f", daySum.expense), isBangla),
+                                    fontSize = 10.sp,
+                                    color = Color(0xFFD97706)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
